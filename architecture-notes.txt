@@ -1,0 +1,182 @@
+CONTENT BROADCASTING SYSTEM - ARCHITECTURE NOTES
+
+--------------------------------------------------
+1. Authentication & RBAC Flow
+--------------------------------------------------
+The system uses JWT-based authentication.
+
+Flow:
+- User logs in using email and password
+- Password is verified using bcrypt
+- On success, a JWT token is generated containing:
+  - user id
+  - role (teacher / principal)
+
+Middleware:
+- authenticateUser: verifies JWT and attaches user to request
+- authorizeRole: restricts access based on role
+
+Access Control:
+- Teacher:
+  - Upload content
+  - View their content status
+- Principal:
+  - View all content
+  - Approve / Reject content
+
+--------------------------------------------------
+2. Subject-Based System Design
+--------------------------------------------------
+Each subject has its own independent rotation system.
+
+Design:
+- Content is tagged with a subject (maths, science, etc.)
+- ContentSlot represents a subject-level grouping
+- ContentSchedule controls rotation for that subject
+
+Key Idea:
+Rotation is NOT global.
+Each subject rotates independently.
+
+Example:
+Maths → A → B → C
+Science → X → Y
+
+--------------------------------------------------
+3. Upload Handling Approach
+--------------------------------------------------
+File uploads are handled using Multer.
+
+Features:
+- Supported formats: JPG, PNG, GIF
+- Max size: 10MB
+- Files stored locally in /uploads folder
+
+Flow:
+- Teacher uploads content with metadata
+- File is validated (type & size)
+- File path and metadata stored in DB
+
+Validation:
+- Title required
+- Subject required
+- File required
+
+--------------------------------------------------
+4. Approval Workflow Design
+--------------------------------------------------
+Content follows lifecycle:
+
+uploaded → pending → approved / rejected
+
+Flow:
+- Teacher uploads → status = pending
+- Principal reviews content
+- Principal can:
+  - Approve → status = approved
+  - Reject → status = rejected + reason
+
+Important:
+Only approved content is eligible for broadcasting.
+
+--------------------------------------------------
+5. Scheduling & Rotation Logic (CORE)
+--------------------------------------------------
+Scheduling is implemented using ContentSchedule.
+
+Each scheduled content has:
+- rotation_order
+- duration (in minutes)
+
+Algorithm:
+1. Fetch approved content for teacher + subject
+2. Filter by time window:
+   start_time <= current_time <= end_time
+3. Sort by rotation_order
+4. Compute:
+   totalDuration = sum(duration)
+   elapsed = current_time % totalDuration
+5. Iterate:
+   return content where elapsed falls within duration
+
+This ensures:
+- continuous looping
+- deterministic rotation
+- stateless computation (no cron needed)
+
+--------------------------------------------------
+6. Database Design Decisions
+--------------------------------------------------
+Tables:
+
+Users:
+- Stores teacher/principal info
+- Role-based access control
+
+Content:
+- Stores uploaded content
+- Includes scheduling window (start_time, end_time)
+
+ContentSlot:
+- Represents subject grouping
+
+ContentSchedule:
+- Stores rotation configuration
+- Defines order and duration
+
+Design Principles:
+- Separation of concerns
+- Normalized schema
+- Flexibility for scheduling
+
+--------------------------------------------------
+7. Folder Structure
+--------------------------------------------------
+src/
+  controllers/  → handle request/response
+  services/     → business logic
+  routes/       → API endpoints
+  middlewares/  → auth, error handling
+  utils/        → helpers (multer)
+  config/       → prisma, redis
+
+Flow:
+Route → Controller → Service → DB
+
+--------------------------------------------------
+8. Middleware Usage
+--------------------------------------------------
+- Authentication Middleware:
+  verifies JWT
+
+- Authorization Middleware:
+  enforces role-based access
+
+- Error Middleware:
+  centralized error handling
+
+- Rate Limiter:
+  protects public API
+
+--------------------------------------------------
+9. Scalability Approach
+--------------------------------------------------
+
+Caching (Redis):
+- /content/live API is cached
+- Reduces DB load
+- Improves performance
+
+Stateless Design:
+- Rotation logic computed dynamically
+- No background jobs required
+
+Future Improvements:
+- Use cron jobs for precomputed scheduling
+- Use message queues for async processing
+- Use S3 for file storage
+- Add CDN for content delivery
+
+--------------------------------------------------
+END
+--------------------------------------------------

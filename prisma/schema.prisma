@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int        @id @default(autoincrement())
+  name          String
+  email         String     @unique
+  password_hash String
+  role          Role
+  created_at    DateTime   @default(now())
+
+  // Relations
+  uploadedContent Content[] @relation("UploadedContent")
+  approvedContent Content[] @relation("ApprovedContent")
+}
+
+model Content {
+  id               Int          @id @default(autoincrement())
+  title            String
+  description      String?
+  subject          Subject
+  file_url         String
+  file_type        String
+  file_size        Int
+
+  uploaded_by      Int
+  uploader         User         @relation("UploadedContent", fields: [uploaded_by], references: [id])
+
+  status           ContentStatus @default(pending)
+  rejection_reason String?
+
+  approved_by      Int?
+  approver         User?        @relation("ApprovedContent", fields: [approved_by], references: [id])
+  approved_at      DateTime?
+
+  created_at       DateTime     @default(now())
+
+  // Relations
+  schedules        ContentSchedule[]
+  start_time       DateTime?
+  end_time         DateTime?
+}
+
+model ContentSlot {
+  id         Int      @id @default(autoincrement())
+  subject    Subject
+  created_at DateTime @default(now())
+
+  schedules  ContentSchedule[]
+}
+
+model ContentSchedule {
+  id             Int      @id @default(autoincrement())
+  content_id     Int
+  slot_id        Int
+  rotation_order Int
+  duration       Int      // in minutes
+  created_at     DateTime @default(now())
+
+  // Relations
+  content Content     @relation(fields: [content_id], references: [id])
+  slot    ContentSlot @relation(fields: [slot_id], references: [id])
+
+  @@unique([slot_id, rotation_order]) // prevents duplicate order in same slot
+}
+
+enum Role {
+  principal
+  teacher
+}
+
+enum Subject {
+  maths
+  science
+  english
+  social
+  other
+}
+
+enum ContentStatus {
+  pending
+  approved
+  rejected
+}
